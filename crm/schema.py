@@ -1,12 +1,11 @@
 import graphene
 from graphene_django import DjangoObjectType
 from .models import Customer, Product, Order
-from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from graphene_django.filter import DjangoFilterConnectionField
 from .filters import CustomerFilter, ProductFilter, OrderFilter
-from crm.models import Product
 
 
 class CustomerType(DjangoObjectType):
@@ -55,7 +54,7 @@ class CreateCustomer(graphene.Mutation):
 
     def mutate(self, info, name, email, phone=None):
         if Customer.objects.filter(email=email).exists():
-            raise Exception("Email already exists")
+            raise ValidationError("Email already exists")
 
         customer = Customer(name=name, email=email, phone=phone)
         customer.full_clean()
@@ -107,9 +106,9 @@ class CreateProduct(graphene.Mutation):
 
     def mutate(self, info, name, price, stock):
         if price <= 0:
-            raise Exception("Price must be positive")
+            raise ValidationError("Price must be positive")
         if stock < 0:
-            raise Exception("Stock cannot be negative")
+            raise ValidationError("Stock cannot be negative")
 
         product = Product(name=name, price=price, stock=stock)
         product.full_clean()
@@ -127,26 +126,46 @@ class CreateOrder(graphene.Mutation):
 
     def mutate(self, info, customer_id, product_ids, order_date=None):
         if not product_ids:
-            raise Exception("At least one product must be selected")
+            raise ValidationError("At least one product must be selected")
 
         try:
             customer = Customer.objects.get(pk=customer_id)
         except Customer.DoesNotExist:
-            raise Exception("Invalid customer ID")
+            raise ValidationError("Invalid customer ID")
 
-        products = Product.objects.filter(pk__in=product_ids)
-        if products.count() != len(product_ids):
-            raise Exception("One or more product IDs are invalid")
+        products = list(Product.objects.filter(pk__in=product_ids))
+        if len(products) != len(product_ids):
+            raise ValidationError("One or more product IDs are invalid")
 
         total_amount = sum([p.price for p in products])
-        order = Order(
-            customer=customer,
-            total_amount=total_amount,
-            order_date=order_date or timezone.now(),
-        )
-        order.save()
-        order.products.set(products)
+
+        with transaction.atomic():
+            order = Order(
+                customer=customer,
+                total_amount=total_amount,
+                order_date=order_date or timezone.now(),
+            )
+            order.save()
+            order.products.set(products)
+
         return CreateOrder(order=order)
+
+
+class UpdateLowStockProducts(graphene.Mutation):
+    updated_products = graphene.List(graphene.String)
+    message = graphene.String()
+
+    def mutate(self, info):
+        low_stock = Product.objects.filter(stock__lt=10)
+        updated = []
+        for product in low_stock:
+            product.stock += 10
+            product.save()
+            updated.append(product.name)
+        return UpdateLowStockProducts(
+            updated_products=updated,
+            message="Low-stock products restocked"
+        )
 
 
 class Query(graphene.ObjectType):
@@ -170,20 +189,3 @@ class Mutation(graphene.ObjectType):
     create_product = CreateProduct.Field()
     create_order = CreateOrder.Field()
     update_low_stock_products = UpdateLowStockProducts.Field()
-
-
-class UpdateLowStockProducts(graphene.Mutation):
-    updated_products = graphene.List(graphene.String)
-    message = graphene.String()
-
-    def mutate(self, info):
-        low_stock = Product.objects.filter(stock__lt=10)
-        updated = []
-        for product in low_stock:
-            product.stock += 10
-            product.save()
-            updated.append(product.name)
-        return UpdateLowStockProducts(
-            updated_products=updated,
-            message="Low-stock products restocked"
-        )
