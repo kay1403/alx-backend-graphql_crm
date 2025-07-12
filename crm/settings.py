@@ -1,7 +1,6 @@
-# config/settings.py
+# crm/settings.py
 
 INSTALLED_APPS = [
-    # ... tes apps existantes ...
     'django_crontab',
 ]
 
