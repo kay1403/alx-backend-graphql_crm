@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Get the directory of the current script
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
-cd "$DIR"
+# Get current working directory (cwd) based on script location
+cwd="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
+cd "$cwd"
 
 if [ -f "manage.py" ]; then
     deleted_count=$(python3 manage.py shell -c "
@@ -16,5 +16,5 @@ print(count)
 ")
     echo "$(date '+%Y-%m-%d %H:%M:%S') - Deleted customers: $deleted_count" >> /tmp/customer_cleanup_log.txt
 else
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: manage.py not found in $DIR" >> /tmp/customer_cleanup_log.txt
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: manage.py not found in $cwd" >> /tmp/customer_cleanup_log.txt
 fi
