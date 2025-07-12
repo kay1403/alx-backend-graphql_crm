@@ -137,7 +137,7 @@ class CreateOrder(graphene.Mutation):
         if len(products) != len(product_ids):
             raise ValidationError("One or more product IDs are invalid")
 
-        total_amount = sum([p.price for p in products])
+        total_amount = sum(p.price for p in products)
 
         with transaction.atomic():
             order = Order(
